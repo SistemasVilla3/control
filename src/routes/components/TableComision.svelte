@@ -7,6 +7,7 @@
 	import { onMount } from "svelte";
     import { empleado, jwtToken } from '$lib/functions/AuthStore';
 	import { formatNumber } from "$lib/functions/Multitask";
+    import Swal from "sweetalert2";
 
     const API_ACT_COM = "http://192.168.10.134:8018/ActualizarPorcentajeComision";
     const API_ACT_MCOM = "http://192.168.10.134:8018/ActualizarComisionDeLaMarcaDelDepartamento";
@@ -57,20 +58,28 @@
         }
         expandedDept = dept.IdDepartamento;
 
-        if (!marcasPorDept[dept.IdDepartamento]) {
-            loadingMarcas[dept.IdDepartamento] = true;
-            try {
-                const marcas = (await fetchMarcDept(dept.IdDepartamento)) as Marca[];
-                marcasPorDept[dept.IdDepartamento] = marcas.map((m) => ({
+        await cargarMarcasDept(dept.IdDepartamento);
+    }
+
+    async function cargarMarcasDept(deptId: number, force = false) {
+        if (!deptId) return;
+        if (!force && marcasPorDept[deptId]) return;
+
+        loadingMarcas = { ...loadingMarcas, [deptId]: true };
+        try {
+            const marcas = (await fetchMarcDept(deptId)) as Marca[];
+            marcasPorDept = {
+                ...marcasPorDept,
+                [deptId]: marcas.map((m) => ({
                     ...m,
                     nuevaComision: 0
-                }));
-            } catch (e) {
-                console.error("Error cargando marcas:", e);
-                marcasPorDept[dept.IdDepartamento] = [];
-            } finally {
-                loadingMarcas[dept.IdDepartamento] = false;
-            }
+                }))
+            };
+        } catch (e) {
+            console.error("Error cargando marcas:", e);
+            marcasPorDept = { ...marcasPorDept, [deptId]: [] };
+        } finally {
+            loadingMarcas = { ...loadingMarcas, [deptId]: false };
         }
     }
 
@@ -116,17 +125,47 @@
     async function guardarDept(dept: ComisionDeptEdit) {
         if (dept.nuevaComision == null || Number.isNaN(dept.nuevaComision)) return;
         const id = dept.IdDepartamento;
+        const confirmation = await Swal.fire({
+            title: "Actualizar comision",
+            text: `Cambiar la comision de ${dept.Nombre} impactara en todas sus marcas. Desea continuar?`,
+            icon: "warning",
+            showCancelButton: true,
+            confirmButtonText: "Si, actualizar",
+            cancelButtonText: "Cancelar",
+            reverseButtons: true,
+            focusCancel: true
+        });
+        if (!confirmation.isConfirmed) {
+            return;
+        }
         try {
-            updatingDept[id] = true;
+            updatingDept = { ...updatingDept, [id]: true };
             await updateDept(id, Number(dept.nuevaComision));
-            alert(`Comision de ${dept.Nombre} actualizada correctamente`);
+            await Swal.fire({
+                title: "Comision actualizada",
+                text: `La comision de ${dept.Nombre} se actualizo correctamente`,
+                icon: "success",
+                confirmButtonText: "Aceptar"
+            });
             dept.nuevaComision = 0;
             await loadComisiones();
+            if (expandedDept === id) {
+                await cargarMarcasDept(id, true);
+            } else if (marcasPorDept[id]) {
+                const updated = { ...marcasPorDept };
+                delete updated[id];
+                marcasPorDept = updated;
+            }
         } catch (e) {
             console.error(e);
-            alert("Error al actualizar la comision del departamento");
+            await Swal.fire({
+                title: "Error",
+                text: "Error al actualizar la comision del departamento",
+                icon: "error",
+                confirmButtonText: "Aceptar"
+            });
         } finally {
-            updatingDept[id] = false;
+            updatingDept = { ...updatingDept, [id]: false };
         }
     }
 
@@ -142,30 +181,31 @@
         if (m.nuevaComision == null || Number.isNaN(m.nuevaComision)) return;
         const key:any = marcaKey(m);
         try {
-            updatingMarca[key] = true;
+            updatingMarca = { ...updatingMarca, [key]: true };
             await updateMarca(Number(m.DepartamentoID), Number(m.MarcaID), Number(m.nuevaComision));
-            alert(`Comision de la marca ${nombreMarca(m)} actualizada correctamente`);
-            m.nuevaComision =0;
+            await Swal.fire({
+                title: "Comision actualizada",
+                text: `La comision de la marca ${nombreMarca(m)} se actualizo correctamente`,
+                icon: "success",
+                confirmButtonText: "Aceptar"
+            });
+            m.nuevaComision = 0;
 
             //Refrecar el panel de marcas del departamento para ver comision actualizada
-            const deptId = m.DepartamentoID;
+            const deptId = Number(m.DepartamentoID);
             if (deptId) {
-                loadingMarcas[deptId] = true;
-                try {
-                    const marcas = (await fetchMarcDept(deptId)) as Marca[];
-                    marcasPorDept[deptId] = marcas.map((mx) => ({
-                        ...mx,
-                        nuevaComision: 0
-                    }));
-                } finally {
-                    loadingMarcas[deptId] = false;
-                }
+                await cargarMarcasDept(deptId, true);
             }
         } catch (e) {
             console.error(e);
-            alert("Error al actualizar la comision de la amrca");
+            await Swal.fire({
+                title: "Error",
+                text: "Error al actualizar la comision de la marca",
+                icon: "error",
+                confirmButtonText: "Aceptar"
+            });
         } finally {
-            updatingMarca[key] = false;
+            updatingMarca = { ...updatingMarca, [key]: false };
         }
     }
 
@@ -245,10 +285,10 @@
 																Marca
 															</th>
 															<th class="px-4 py-2 text-xs font-medium tracking-wider text-gray-900 uppercase text-center">
-																Comisión actual
+																Comisi├│n actual
 															</th>
 															<th class="px-4 py-2 text-xs font-medium tracking-wider text-gray-900 uppercase text-center">
-																Nueva comisión
+																Nueva comisi├│n
 															</th>
 														</tr>
 													</thead>
@@ -308,7 +348,7 @@
 .table-scroll::-webkit-scrollbar-thumb {
   background: #800000;         /* blue-500 */
   border-radius: 4px;
-  border: .5px solid #f3f4f6;   /* margen “inset” */
+  border: .5px solid #f3f4f6;   /* margen ÔÇ£insetÔÇØ */
 }
 .table-scroll:hover::-webkit-scrollbar-thumb {
   background: #bd1f19;         /* blue-600 */

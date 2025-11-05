@@ -46,7 +46,7 @@
 
     onMount(() => {
         loadSellers();
-        interval = setInterval(() => {loadSellers(); }, 150_000);
+        interval = setInterval(() => {loadSellers(); }, 600_000);
     });
     onDestroy(() => {clearInterval(interval);})
 </script>

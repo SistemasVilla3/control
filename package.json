@@ -44,6 +44,7 @@
 		"fs-extra": "^11.3.0",
 		"jwt-decode": "^4.0.0",
 		"siema": "^1.5.1",
-		"svelte-file-dropzone": "^2.0.9"
+		"svelte-file-dropzone": "^2.0.9",
+		"sweetalert2": "^11.26.3"
 	}
 }

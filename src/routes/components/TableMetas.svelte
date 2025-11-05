@@ -157,7 +157,7 @@
 		loadVendedores();
 		interval = setInterval(() => {
 			loadVendedores();
-		}, 150_000);
+		}, 600_000);
 	});
 	onDestroy(() => {
 		clearInterval(interval);
